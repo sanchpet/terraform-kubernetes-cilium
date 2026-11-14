@@ -31,6 +31,13 @@ jobs:
           ./terraform-docs . && rm terraform-docs
           git diff --exit-code README.md
 
+  gateway-api-crds:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Vendored bundles match the upstream release assets
+        run: scripts/vendor-gateway-api.sh --verify
+
   pr-title:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

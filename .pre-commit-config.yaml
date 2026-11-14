@@ -1,4 +1,7 @@
 # Run `pre-commit install` once after cloning; mise does it on `mise install`.
+# Vendored Gateway API bundles must stay byte-identical to the upstream asset, and the chart
+# templates are not plain YAML.
+exclude: ^charts/gateway-api-crds/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
