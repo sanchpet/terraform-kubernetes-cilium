@@ -3,12 +3,14 @@
 # before a GitOps controller is installed.
 
 provider "helm" {
-  kubernetes {
+  kubernetes = {
     config_path    = pathexpand(var.kubeconfig_path)
     config_context = var.kubeconfig_context
   }
 }
 
+# Configured only so Terraform can drop the kubectl_manifest instances that v0.1.0 left in state
+# (see the removed block below); nothing in this module uses it otherwise.
 provider "kubectl" {
   config_path      = pathexpand(var.kubeconfig_path)
   config_context   = var.kubeconfig_context
@@ -16,10 +18,12 @@ provider "kubectl" {
 }
 
 # --- Gateway API CRDs -----------------------------------------------------------------------
-# Cilium's Gateway API controller requires the standard-channel CRDs pre-installed. Fetch the
-# pinned upstream bundle and server-side-apply it (CRDs are large — SSA avoids the last-applied
-# annotation size limit). Fetched unconditionally (a cheap GET) to keep the for_each type simple;
-# nothing is applied when enable_gateway_api is false.
+# Cilium's Gateway API controller requires the standard-channel CRDs pre-installed. They ship
+# inside this module as a small chart per supported release (charts/gateway-api-crds/<version>,
+# vendored by scripts/vendor-gateway-api.sh), so apply fetches nothing and state holds only the
+# release metadata, not the 1 MB bundle. Every object carries helm.sh/resource-policy: keep:
+# deleting a CRD cascade-deletes every Gateway and route, so neither destroy nor disabling the
+# Gateway API removes them.
 #
 # gateway_api_version is COUPLED to cilium_version, and the coupling fails quietly: the operator
 # validates these CRDs once at start and, finding them too old, disables its entire Gateway API
@@ -27,19 +31,39 @@ provider "kubectl" {
 # gateway TLS into cilium-secrets, so every HTTPS host accepts TCP and resets the handshake —
 # a total outage of the public surface that looks like a network fault from outside. Bump both
 # together and check the operator log for "Required GatewayAPI resources are not found".
-data "http" "gateway_api_crds" {
-  url = "https://github.com/kubernetes-sigs/gateway-api/releases/download/${var.gateway_api_version}/standard-install.yaml"
+locals {
+  gateway_api_charts = "${path.module}/charts/gateway-api-crds"
 }
 
-data "kubectl_file_documents" "gateway_api_crds" {
-  content = data.http.gateway_api_crds.response_body
+resource "helm_release" "gateway_api_crds" {
+  count = var.enable_gateway_api ? 1 : 0
+
+  name      = "gateway-api-crds"
+  namespace = "kube-system"
+  chart     = "${local.gateway_api_charts}/${var.gateway_api_version}"
+
+  # Adopts CRDs that already exist, whether a v0.1.0 install applied them or someone else did.
+  take_ownership = true
+  max_history    = 3
+  wait           = true
+
+  lifecycle {
+    precondition {
+      condition     = fileexists("${local.gateway_api_charts}/${var.gateway_api_version}/Chart.yaml")
+      error_message = "gateway_api_version ${var.gateway_api_version} is not vendored in this module; supported: ${join(", ", sort([for f in fileset(local.gateway_api_charts, "*/Chart.yaml") : dirname(f)]))}."
+    }
+  }
 }
 
-resource "kubectl_manifest" "gateway_api_crds" {
-  for_each = var.enable_gateway_api ? data.kubectl_file_documents.gateway_api_crds.manifests : {}
+# v0.1.0 applied the CRDs as kubectl_manifest resources. Forget them without deleting the live
+# objects; helm_release.gateway_api_crds adopts them in place. Keep this block for good: a
+# consumer upgrading from v0.1.0 to a release without it would plan to destroy every CRD.
+removed {
+  from = kubectl_manifest.gateway_api_crds
 
-  yaml_body         = each.value
-  server_side_apply = true
+  lifecycle {
+    destroy = false
+  }
 }
 
 # --- Cilium ---------------------------------------------------------------------------------
@@ -214,7 +238,7 @@ resource "helm_release" "cilium" {
   )
 
   # The Gateway API CRDs must exist before Cilium starts its Gateway controller.
-  depends_on = [kubectl_manifest.gateway_api_crds]
+  depends_on = [helm_release.gateway_api_crds]
 
   # Installing onto a fresh, still-NotReady cluster: Cilium is what brings the nodes Ready, so
   # wait for the rollout (bounded) rather than racing ahead to the GitOps install.
