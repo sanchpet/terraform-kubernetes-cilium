@@ -23,12 +23,13 @@ jobs:
         with:
           tflint_version: v0.64.0
       - run: tflint --init && tflint
+      # The same terraform-docs as mise.toml: other versions format the tables differently.
       - name: README docs block is current
-        uses: terraform-docs/gh-actions@v1.4.1
-        with:
-          working-dir: .
-          config-file: .terraform-docs.yml
-          fail-on-diff: true
+        run: |
+          curl -sSLo td.tgz https://github.com/terraform-docs/terraform-docs/releases/download/v0.24.0/terraform-docs-v0.24.0-linux-amd64.tar.gz
+          tar -xzf td.tgz terraform-docs && rm td.tgz
+          ./terraform-docs . && rm terraform-docs
+          git diff --exit-code README.md
 
   pr-title:
     if: github.event_name == 'pull_request'
