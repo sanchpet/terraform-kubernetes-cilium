@@ -11,8 +11,9 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 3.1"
     }
-    # Unused by any resource since v0.2.0, but the removed block for the v0.1.0 kubectl_manifest
+    # No resource uses it any more, but the removed block in main.tf for the old kubectl_manifest
     # instances needs the provider's schema, so it stays declared for as long as that block does.
+    # No release numbers in this file: release-please rewrites every one it finds here.
     kubectl = {
       source  = "alekc/kubectl"
       version = "~> 2.1"
