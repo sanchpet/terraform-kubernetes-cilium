@@ -1,0 +1,10 @@
+{{- range $doc := regexSplit "(?m)^---[ \t]*$" (.Files.Get "files/standard-install.yaml") -1 }}
+{{- $obj := fromYaml $doc }}
+{{- if hasKey $obj "Error" }}{{ fail $obj.Error }}{{ end }}
+{{- if $obj.kind }}
+{{- /* keep: uninstalling the release must not delete the CRDs and cascade-delete every route. */}}
+{{- $_ := set $obj.metadata "annotations" (merge (dict "helm.sh/resource-policy" "keep") ($obj.metadata.annotations | default dict)) }}
+---
+{{ toYaml $obj }}
+{{- end }}
+{{- end }}

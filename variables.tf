@@ -93,7 +93,7 @@ variable "enable_host_port" {
 }
 
 variable "enable_gateway_api" {
-  description = "Enable Cilium Gateway API (installs the standard Gateway API CRDs first, then the controller)."
+  description = "Enable Cilium Gateway API (installs the standard Gateway API CRDs first, then the controller). Turning it off later leaves the CRDs in the cluster."
   type        = bool
   default     = true
 }
@@ -105,10 +105,9 @@ variable "enable_gateway_hostnetwork" {
 }
 
 variable "gateway_api_version" {
-  description = "Gateway API release whose standard CRDs are installed (must satisfy the floor the pinned Cilium validates at operator start)."
+  description = "Gateway API release whose standard CRDs are installed (must satisfy the floor the pinned Cilium validates at operator start). One of the releases vendored under charts/gateway-api-crds/; plan fails on any other."
   type        = string
-  # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-  default = "v1.5.1"
+  default     = "v1.5.1"
 }
 
 variable "extra_values" {
